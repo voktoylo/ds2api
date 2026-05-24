@@ -88,9 +88,19 @@ func (h *Handler) Responses(w http.ResponseWriter, r *http.Request) {
 		writeOpenAIError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	preApplyStdReq := stdReq
 	stdReq, err = h.applyCurrentInputFile(r.Context(), a, stdReq)
 	if err != nil {
 		status, message := mapCurrentInputFileError(err)
+		if session := responsehistory.Start(responsehistory.StartParams{
+			Store:    h.ChatHistory,
+			Request:  r,
+			Auth:     a,
+			Surface:  "openai.responses",
+			Standard: preApplyStdReq,
+		}); session != nil {
+			session.Error(status, message, "error", "", "")
+		}
 		writeOpenAIError(w, status, message)
 		return
 	}

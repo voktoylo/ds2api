@@ -6,11 +6,14 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
 	"ds2api/internal/config"
 )
+
+const permbanThreshold = 60 * 24 * time.Hour
 
 func (h *Handler) listAccounts(w http.ResponseWriter, r *http.Request) {
 	page := intFromQuery(r, "page", 1)
@@ -24,7 +27,8 @@ func (h *Handler) listAccounts(w http.ResponseWriter, r *http.Request) {
 	if pageSize > 5000 {
 		pageSize = 5000
 	}
-	accounts := h.Store.Snapshot().Accounts
+	allAccounts := h.Store.Snapshot().Accounts
+	accounts := append([]config.Account(nil), allAccounts...)
 	reverseAccounts(accounts)
 	q := strings.TrimSpace(strings.ToLower(r.URL.Query().Get("q")))
 	if q != "" {
@@ -36,6 +40,17 @@ func (h *Handler) listAccounts(w http.ResponseWriter, r *http.Request) {
 				strings.Contains(strings.ToLower(acc.Remark), q) ||
 				strings.Contains(strings.ToLower(acc.Email), q) ||
 				strings.Contains(strings.ToLower(acc.Mobile), q) {
+				filtered = append(filtered, acc)
+			}
+		}
+		accounts = filtered
+	}
+	statusFilter := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("status")))
+	if statusFilter != "" && statusFilter != "all" {
+		now := time.Now()
+		filtered := make([]config.Account, 0, len(accounts))
+		for _, acc := range accounts {
+			if h.accountStatusBucket(acc, now) == statusFilter {
 				filtered = append(filtered, acc)
 			}
 		}
@@ -54,24 +69,89 @@ func (h *Handler) listAccounts(w http.ResponseWriter, r *http.Request) {
 	if end > total {
 		end = total
 	}
+	now := time.Now()
 	items := make([]map[string]any, 0, end-start)
 	for _, acc := range accounts[start:end] {
 		testStatus, _ := h.Store.AccountTestStatus(acc.Identifier())
 		token := strings.TrimSpace(acc.Token)
+		isMuted := false
+		muteUntil := ""
+		muteCheckedAt := ""
+		if h.MuteStore != nil {
+			if status, ok := h.MuteStore.Get(acc.Identifier()); ok {
+				isMuted = status.IsMuted
+				if !status.MuteUntil.IsZero() {
+					muteUntil = status.MuteUntil.UTC().Format(time.RFC3339)
+				}
+				if !status.CheckedAt.IsZero() {
+					muteCheckedAt = status.CheckedAt.UTC().Format(time.RFC3339)
+				}
+			}
+		}
 		items = append(items, map[string]any{
-			"identifier":    acc.Identifier(),
-			"name":          acc.Name,
-			"remark":        acc.Remark,
-			"email":         acc.Email,
-			"mobile":        acc.Mobile,
-			"proxy_id":      acc.ProxyID,
-			"has_password":  acc.Password != "",
-			"has_token":     token != "",
-			"token_preview": maskSecretPreview(token),
-			"test_status":   testStatus,
+			"identifier":      acc.Identifier(),
+			"name":            acc.Name,
+			"remark":          acc.Remark,
+			"email":           acc.Email,
+			"mobile":          acc.Mobile,
+			"proxy_id":        acc.ProxyID,
+			"has_password":    acc.Password != "",
+			"has_token":       token != "",
+			"token_preview":   maskSecretPreview(token),
+			"test_status":     testStatus,
+			"is_muted":        isMuted,
+			"mute_until":      muteUntil,
+			"mute_checked_at": muteCheckedAt,
+			"status_bucket":   h.accountStatusBucket(acc, now),
 		})
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items, "total": total, "page": page, "page_size": pageSize, "total_pages": totalPages})
+	resp := map[string]any{
+		"items":         items,
+		"total":         total,
+		"page":          page,
+		"page_size":     pageSize,
+		"total_pages":   totalPages,
+		"status_counts": h.computeStatusCounts(allAccounts),
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// accountStatusBucket: "active" | "muted" | "permban" | "error"
+func (h *Handler) accountStatusBucket(acc config.Account, now time.Time) string {
+	muted, until := h.mutedStateForAccount(acc, now)
+	if muted {
+		if !until.IsZero() && until.Sub(now) >= permbanThreshold {
+			return "permban"
+		}
+		return "muted"
+	}
+	if status, ok := h.Store.AccountTestStatus(acc.Identifier()); ok && status == "failed" {
+		return "error"
+	}
+	return "active"
+}
+
+func (h *Handler) mutedStateForAccount(acc config.Account, now time.Time) (bool, time.Time) {
+	if h == nil || h.MuteStore == nil {
+		return false, time.Time{}
+	}
+	st, ok := h.MuteStore.Get(acc.Identifier())
+	if !ok || !st.IsMuted {
+		return false, time.Time{}
+	}
+	if !st.MuteUntil.IsZero() && now.After(st.MuteUntil) {
+		return false, time.Time{}
+	}
+	return true, st.MuteUntil
+}
+
+func (h *Handler) computeStatusCounts(accounts []config.Account) map[string]int {
+	counts := map[string]int{"all": len(accounts), "active": 0, "muted": 0, "permban": 0, "error": 0}
+	now := time.Now()
+	for _, acc := range accounts {
+		counts[h.accountStatusBucket(acc, now)]++
+	}
+	return counts
 }
 
 func (h *Handler) addAccount(w http.ResponseWriter, r *http.Request) {

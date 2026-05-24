@@ -72,8 +72,10 @@ func main() {
 
 	if err := srv.Shutdown(ctx); err != nil {
 		config.Logger.Error("graceful shutdown failed, forcing exit", "error", err)
+		app.Shutdown()
 		os.Exit(1)
 	}
+	app.Shutdown()
 	config.Logger.Info("server gracefully stopped")
 }
 

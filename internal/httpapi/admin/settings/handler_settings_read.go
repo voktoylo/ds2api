@@ -26,6 +26,7 @@ func (h *Handler) getSettings(w http.ResponseWriter, _ *http.Request) {
 			"account_max_queue":            h.Store.RuntimeAccountMaxQueue(recommended),
 			"global_max_inflight":          h.Store.RuntimeGlobalMaxInflight(recommended),
 			"token_refresh_interval_hours": h.Store.RuntimeTokenRefreshIntervalHours(),
+			"mute_scan_interval_seconds":   h.Store.RuntimeMuteScanIntervalSeconds(),
 		},
 		"responses":   snap.Responses,
 		"embeddings":  snap.Embeddings,
@@ -40,6 +41,7 @@ func (h *Handler) getSettings(w http.ResponseWriter, _ *http.Request) {
 			"default_prompt": promptcompat.DefaultThinkingInjectionPrompt,
 		},
 		"model_aliases":     snap.ModelAliases,
+		"pool_strategy":     h.Store.PoolStrategy(),
 		"env_backed":        h.Store.IsEnvBacked(),
 		"needs_vercel_sync": needsSync,
 	})

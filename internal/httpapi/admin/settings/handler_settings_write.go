@@ -52,6 +52,9 @@ func (h *Handler) updateSettings(w http.ResponseWriter, r *http.Request) {
 			if runtimeCfg.TokenRefreshIntervalHours > 0 {
 				c.Runtime.TokenRefreshIntervalHours = runtimeCfg.TokenRefreshIntervalHours
 			}
+			if runtimeCfg.MuteScanIntervalSeconds > 0 {
+				c.Runtime.MuteScanIntervalSeconds = runtimeCfg.MuteScanIntervalSeconds
+			}
 		}
 		if responsesCfg != nil && responsesCfg.StoreTTLSeconds > 0 {
 			c.Responses.StoreTTLSeconds = responsesCfg.StoreTTLSeconds
@@ -82,13 +85,28 @@ func (h *Handler) updateSettings(w http.ResponseWriter, r *http.Request) {
 		if aliasMap != nil {
 			c.ModelAliases = aliasMap
 		}
+		if raw, ok := req["pool_strategy"].(string); ok {
+			s := strings.ToLower(strings.TrimSpace(raw))
+			if s == "round_robin" || s == "sticky" {
+				c.PoolStrategy = s
+			} else if s != "" {
+				return &poolStrategyError{detail: "pool_strategy 必须是 round_robin 或 sticky"}
+			}
+		}
 		return nil
 	}); err != nil {
+		if pse, ok := err.(*poolStrategyError); ok {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"detail": pse.detail})
+			return
+		}
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"detail": err.Error()})
 		return
 	}
 
 	h.applyRuntimeSettings()
+	if h.Pool != nil {
+		h.Pool.SetStrategy(h.Store.PoolStrategy())
+	}
 	needsSync := config.IsVercel() || h.Store.IsEnvBacked()
 	writeJSON(w, http.StatusOK, map[string]any{
 		"success":             true,
@@ -141,3 +159,7 @@ func hasNestedSettingsKey(req map[string]any, section, key string) bool {
 	_, exists := raw[key]
 	return exists
 }
+
+type poolStrategyError struct{ detail string }
+
+func (e *poolStrategyError) Error() string { return e.detail }

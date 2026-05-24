@@ -85,6 +85,15 @@ func (h *Handler) handleClaudeDirect(w http.ResponseWriter, r *http.Request) boo
 	stdReq, err := h.applyCurrentInputFile(r.Context(), a, norm.Standard)
 	if err != nil {
 		status, message := mapCurrentInputFileError(err)
+		if session := responsehistory.Start(responsehistory.StartParams{
+			Store:    h.ChatHistory,
+			Request:  r,
+			Auth:     a,
+			Surface:  "claude.messages",
+			Standard: norm.Standard,
+		}); session != nil {
+			session.Error(status, message, "error", "", "")
+		}
 		writeClaudeError(w, status, message)
 		return true
 	}

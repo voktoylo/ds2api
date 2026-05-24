@@ -51,12 +51,15 @@ func (p *Pool) acquireLocked(target string, exclude map[string]bool) (config.Acc
 		if exclude[target] || !p.canAcquireIDLocked(target) {
 			return config.Account{}, false
 		}
+		if p.isMutedLocked(target) {
+			return config.Account{}, false
+		}
 		acc, ok := p.store.FindAccount(target)
 		if !ok {
 			return config.Account{}, false
 		}
 		p.inUse[target]++
-		p.bumpQueue(target)
+		p.bumpQueueAfterAcquire(target)
 		return acc, true
 	}
 
@@ -69,15 +72,57 @@ func (p *Pool) tryAcquire(exclude map[string]bool) (config.Account, bool) {
 		if exclude[id] || !p.canAcquireIDLocked(id) {
 			continue
 		}
+		if p.isMutedLocked(id) {
+			continue
+		}
 		acc, ok := p.store.FindAccount(id)
 		if !ok {
 			continue
 		}
 		p.inUse[id]++
-		p.bumpQueue(id)
+		p.bumpQueueAfterAcquire(id)
 		return acc, true
 	}
 	return config.Account{}, false
+}
+
+// isMutedLocked reports whether the configured mute store flags the account as
+// currently muted. The caller must hold p.mu.
+func (p *Pool) isMutedLocked(accountID string) bool {
+	if p.muteStore == nil {
+		return false
+	}
+	return p.muteStore.IsActiveMuted(accountID)
+}
+
+// bumpQueueAfterAcquire moves the just-acquired account based on the active
+// strategy. Round-robin sends it to the back; sticky keeps it in place so
+// future calls keep selecting it until it becomes muted or saturated.
+func (p *Pool) bumpQueueAfterAcquire(accountID string) {
+	if p.strategy == StrategySticky {
+		// Sticky: keep position so the same account is reused. But pull the
+		// chosen account to the head if it's not already, so once a request
+		// lands on a working account the pool keeps preferring it.
+		p.pullToFront(accountID)
+		return
+	}
+	p.bumpQueue(accountID)
+}
+
+// pullToFront moves accountID to position 0 of the queue. No-op when it is
+// already at the head or not present.
+func (p *Pool) pullToFront(accountID string) {
+	for i, id := range p.queue {
+		if id != accountID {
+			continue
+		}
+		if i == 0 {
+			return
+		}
+		p.queue = append(p.queue[:i], p.queue[i+1:]...)
+		p.queue = append([]string{accountID}, p.queue...)
+		return
+	}
 }
 
 func (p *Pool) bumpQueue(accountID string) {

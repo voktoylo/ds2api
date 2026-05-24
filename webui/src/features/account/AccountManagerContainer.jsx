@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useI18n } from '../../i18n'
 import { useAccountsData } from './useAccountsData'
 import { useAccountActions } from './useAccountActions'
@@ -27,6 +28,9 @@ export default function AccountManagerContainer({ config, onRefresh, onMessage, 
         resolveAccountIdentifier,
         searchQuery,
         handleSearchChange,
+        statusFilter,
+        handleStatusFilterChange,
+        statusCounts,
     } = useAccountsData({ apiFetch })
 
     const {
@@ -66,6 +70,10 @@ export default function AccountManagerContainer({ config, onRefresh, onMessage, 
         testAllAccounts,
         deleteAllSessions,
         updateAccountProxy,
+        deleteBatch,
+        refreshMute,
+        batchDeleting,
+        refreshingMute,
     } = useAccountActions({
         apiFetch,
         t,
@@ -75,6 +83,52 @@ export default function AccountManagerContainer({ config, onRefresh, onMessage, 
         fetchAccounts,
         resolveAccountIdentifier,
     })
+
+    const [selectedIds, setSelectedIds] = useState(() => new Set())
+
+    // Clear selection whenever page / pageSize / search / statusFilter changes
+    useEffect(() => {
+        setSelectedIds(new Set())
+    }, [page, pageSize, searchQuery, statusFilter])
+
+    const pageIdentifiers = useMemo(
+        () => accounts.map(acc => resolveAccountIdentifier(acc)).filter(Boolean),
+        [accounts, resolveAccountIdentifier],
+    )
+
+    const handleSelectToggle = useCallback((id) => {
+        if (!id) return
+        setSelectedIds(prev => {
+            const next = new Set(prev)
+            if (next.has(id)) next.delete(id)
+            else next.add(id)
+            return next
+        })
+    }, [])
+
+    const handleSelectAll = useCallback((checked) => {
+        setSelectedIds(prev => {
+            const next = new Set(prev)
+            if (checked) {
+                pageIdentifiers.forEach(id => next.add(id))
+            } else {
+                pageIdentifiers.forEach(id => next.delete(id))
+            }
+            return next
+        })
+    }, [pageIdentifiers])
+
+    const handleBatchDelete = useCallback(async (idsArg) => {
+        const ids = Array.isArray(idsArg) ? idsArg : Array.from(selectedIds)
+        if (ids.length === 0) return
+        if (!confirm(t('accountManager.deleteBatchConfirm', { count: ids.length }))) return
+        const ok = await deleteBatch(ids)
+        if (ok) setSelectedIds(new Set())
+    }, [selectedIds, deleteBatch, t])
+
+    const handleRefreshMute = useCallback(() => {
+        refreshMute()
+    }, [refreshMute])
 
     return (
         <div className="space-y-6">
@@ -100,6 +154,23 @@ export default function AccountManagerContainer({ config, onRefresh, onMessage, 
             )}
 
             <QueueCards queueStatus={queueStatus} t={t} />
+
+            {queueStatus && queueStatus.total > 0 && queueStatus.muted === queueStatus.total && (
+                <div className="rounded-xl border border-destructive/40 bg-destructive/10 text-destructive px-4 py-3 text-sm flex items-start gap-3">
+                    <span className="text-lg leading-none mt-0.5">⚠️</span>
+                    <div className="flex-1">
+                        <p className="font-medium">{t('accountManager.allMutedTitle')}</p>
+                        <p className="mt-1 text-xs opacity-90">{t('accountManager.allMutedDesc', { count: queueStatus.total })}</p>
+                    </div>
+                    <button
+                        onClick={handleRefreshMute}
+                        disabled={refreshingMute}
+                        className="px-3 py-1.5 bg-destructive/20 hover:bg-destructive/30 rounded-md text-xs font-medium border border-destructive/30 disabled:opacity-50 whitespace-nowrap"
+                    >
+                        {refreshingMute ? t('accountManager.refreshingMute') : t('accountManager.refreshMute')}
+                    </button>
+                </div>
+            )}
 
             <ApiKeysPanel
                 t={t}
@@ -142,6 +213,15 @@ export default function AccountManagerContainer({ config, onRefresh, onMessage, 
                 searchQuery={searchQuery}
                 onSearchChange={handleSearchChange}
                 envBacked={Boolean(config?.env_backed)}
+                selectedIds={selectedIds}
+                onSelectToggle={handleSelectToggle}
+                onSelectAll={handleSelectAll}
+                onBatchDelete={handleBatchDelete}
+                statusFilter={statusFilter}
+                onStatusFilterChange={handleStatusFilterChange}
+                statusCounts={statusCounts}
+                batchDeleting={batchDeleting}
+                refreshingMute={refreshingMute}
             />
 
             <AddKeyModal

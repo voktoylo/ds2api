@@ -79,9 +79,19 @@ func (h *Handler) handleGeminiDirect(w http.ResponseWriter, r *http.Request, str
 		return true
 	}
 	defer h.Auth.Release(a)
+	preApplyStdReq := stdReq
 	stdReq, err = h.applyCurrentInputFile(r.Context(), a, stdReq)
 	if err != nil {
 		status, message := mapCurrentInputFileError(err)
+		if session := responsehistory.Start(responsehistory.StartParams{
+			Store:    h.ChatHistory,
+			Request:  r,
+			Auth:     a,
+			Surface:  "gemini.generate_content",
+			Standard: preApplyStdReq,
+		}); session != nil {
+			session.Error(status, message, "error", "", "")
+		}
 		writeGeminiError(w, status, message)
 		return true
 	}

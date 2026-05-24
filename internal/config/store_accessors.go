@@ -141,6 +141,40 @@ func (s *Store) RuntimeTokenRefreshIntervalHours() int {
 	return 6
 }
 
+// RuntimeMuteScanIntervalSeconds returns how often the background mute scanner
+// re-checks every account against DeepSeek's users/current endpoint. Defaults
+// to 43200 seconds (12 hours) when no config or env override is set.
+func (s *Store) RuntimeMuteScanIntervalSeconds() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.cfg.Runtime.MuteScanIntervalSeconds > 0 {
+		return s.cfg.Runtime.MuteScanIntervalSeconds
+	}
+	if raw := strings.TrimSpace(os.Getenv("DS2API_MUTE_SCAN_INTERVAL_SECONDS")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			return n
+		}
+	}
+	return 43200
+}
+
+// PoolStrategy returns the configured account-pool strategy. Supported values
+// are "round_robin" (default) and "sticky". Any unrecognized value falls back
+// to "round_robin".
+func (s *Store) PoolStrategy() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	value := strings.ToLower(strings.TrimSpace(s.cfg.PoolStrategy))
+	switch value {
+	case "sticky":
+		return "sticky"
+	case "round_robin", "":
+		return "round_robin"
+	default:
+		return "round_robin"
+	}
+}
+
 func (s *Store) AutoDeleteSessions() bool {
 	return s.AutoDeleteMode() != "none"
 }

@@ -17,6 +17,8 @@ export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, f
     const [sessionCounts, setSessionCounts] = useState({})
     const [deletingSessions, setDeletingSessions] = useState({})
     const [updatingProxy, setUpdatingProxy] = useState({})
+    const [batchDeleting, setBatchDeleting] = useState(false)
+    const [refreshingMute, setRefreshingMute] = useState(false)
 
     const openAddKey = () => {
         setEditingKey(null)
@@ -276,7 +278,16 @@ export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, f
             setBatchProgress({ current: i + 1, total: allAccounts.length, results: [...results] })
         }
 
-        onMessage('success', t('accountManager.testAllCompleted', { success: successCount, total: allAccounts.length }))
+        const muteResult = await refreshMute({ silent: true })
+        if (muteResult.ok) {
+            onMessage('success', t('accountManager.refreshAllCompleted', {
+                success: successCount,
+                total: allAccounts.length,
+                muted: muteResult.muted,
+            }))
+        } else {
+            onMessage('success', t('accountManager.testAllCompleted', { success: successCount, total: allAccounts.length }))
+        }
         fetchAccounts()
         onRefresh()
         setTestingAll(false)
@@ -345,6 +356,89 @@ export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, f
         }
     }
 
+    const deleteBatch = async (identifiers) => {
+        const ids = Array.isArray(identifiers)
+            ? identifiers.map(x => String(x || '').trim()).filter(Boolean)
+            : []
+        if (ids.length === 0) return false
+        setBatchDeleting(true)
+        try {
+            const res = await apiFetch('/admin/accounts/delete-batch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ identifiers: ids }),
+            })
+            let data = {}
+            try {
+                data = await res.json()
+            } catch {
+                data = {}
+            }
+            if (!res.ok) {
+                onMessage('error', data.detail || data.message || t('messages.deleteFailed'))
+                return false
+            }
+            const deletedCount = Number(
+                data.deleted_count ?? data.deleted ?? (Array.isArray(data.deleted_ids) ? data.deleted_ids.length : ids.length)
+            )
+            const failedList = Array.isArray(data.failed)
+                ? data.failed
+                : (Array.isArray(data.failed_ids) ? data.failed_ids : [])
+            if (failedList.length > 0) {
+                const ids = failedList.map(f => (typeof f === 'string' ? f : (f?.identifier || f?.id || ''))).filter(Boolean).join(', ')
+                onMessage('warning', t('accountManager.deleteBatchPartial', { count: deletedCount, failed: failedList.length, ids }))
+            } else {
+                onMessage('success', t('accountManager.deleteBatchSuccess', { count: deletedCount }))
+            }
+            fetchAccounts()
+            onRefresh()
+            return true
+        } catch (_err) {
+            onMessage('error', t('messages.networkError'))
+            return false
+        } finally {
+            setBatchDeleting(false)
+        }
+    }
+
+    const refreshMute = async (opts = {}) => {
+        const silent = Boolean(opts && opts.silent)
+        setRefreshingMute(true)
+        try {
+            const res = await apiFetch('/admin/accounts/refresh-mute', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+            })
+            let data = {}
+            try {
+                data = await res.json()
+            } catch {
+                data = {}
+            }
+            if (!res.ok) {
+                if (!silent) {
+                    onMessage('error', data.detail || data.message || t('accountManager.muteScanFailed', { error: res.status }))
+                }
+                return { ok: false, checked: 0, muted: 0 }
+            }
+            const checked = Number(data.checked ?? data.checked_count ?? 0)
+            const muted = Number(data.muted ?? data.muted_count ?? 0)
+            if (!silent) {
+                onMessage('success', t('accountManager.muteScanCompleted', { checked, muted }))
+            }
+            fetchAccounts()
+            onRefresh()
+            return { ok: true, checked, muted }
+        } catch (e) {
+            if (!silent) {
+                onMessage('error', t('accountManager.muteScanFailed', { error: e?.message || 'network' }))
+            }
+            return { ok: false, checked: 0, muted: 0 }
+        } finally {
+            setRefreshingMute(false)
+        }
+    }
+
     return {
         showAddKey,
         openAddKey,
@@ -382,5 +476,9 @@ export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, f
         testAllAccounts,
         deleteAllSessions,
         updateAccountProxy,
+        deleteBatch,
+        refreshMute,
+        batchDeleting,
+        refreshingMute,
     }
 }

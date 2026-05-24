@@ -8,11 +8,32 @@ func (p *Pool) canQueueLocked(target string, exclude map[string]bool) bool {
 		if _, ok := p.store.FindAccount(target); !ok {
 			return false
 		}
+		if p.isMutedLocked(target) {
+			return false
+		}
+	} else if !p.hasUnmutedCandidateLocked(exclude) {
+		return false
 	}
 	if p.maxQueueSize <= 0 {
 		return false
 	}
 	return len(p.waiters) < p.maxQueueSize
+}
+
+func (p *Pool) hasUnmutedCandidateLocked(exclude map[string]bool) bool {
+	for _, id := range p.queue {
+		if exclude[id] {
+			continue
+		}
+		if p.isMutedLocked(id) {
+			continue
+		}
+		if _, ok := p.store.FindAccount(id); !ok {
+			continue
+		}
+		return true
+	}
+	return false
 }
 
 func (p *Pool) notifyWaiterLocked() {

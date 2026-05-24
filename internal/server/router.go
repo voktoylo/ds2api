@@ -16,6 +16,8 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"ds2api/internal/account"
+	"ds2api/internal/account/mutescan"
+	"ds2api/internal/account/mutestate"
 	"ds2api/internal/auth"
 	"ds2api/internal/chathistory"
 	"ds2api/internal/config"
@@ -34,11 +36,29 @@ import (
 )
 
 type App struct {
-	Store    *config.Store
-	Pool     *account.Pool
-	Resolver *auth.Resolver
-	DS       *dsclient.Client
-	Router   http.Handler
+	Store            *config.Store
+	Pool             *account.Pool
+	Resolver         *auth.Resolver
+	DS               *dsclient.Client
+	Router           http.Handler
+	MuteStore        *mutestate.Store
+	Scanner          *mutescan.Scanner
+	cancelBackground context.CancelFunc
+}
+
+// Shutdown stops background goroutines (mute scanner) and releases any
+// associated cancellation tokens. Safe to call multiple times.
+func (a *App) Shutdown() {
+	if a == nil {
+		return
+	}
+	if a.Scanner != nil {
+		a.Scanner.Stop()
+	}
+	if a.cancelBackground != nil {
+		a.cancelBackground()
+		a.cancelBackground = nil
+	}
 }
 
 func NewApp() (*App, error) {
@@ -47,6 +67,9 @@ func NewApp() (*App, error) {
 		return nil, fmt.Errorf("load config: %w", err)
 	}
 	pool := account.NewPool(store)
+	muteStore := mutestate.New()
+	pool.AttachMuteStore(muteStore)
+	pool.SetStrategy(store.PoolStrategy())
 	var dsClient *dsclient.Client
 	resolver := auth.NewResolver(store, pool, func(ctx context.Context, acc config.Account) (string, error) {
 		return dsClient.Login(ctx, acc)
@@ -57,6 +80,9 @@ func NewApp() (*App, error) {
 	} else {
 		config.Logger.Info("[PoW] pure Go solver ready")
 	}
+	scanner := mutescan.New(store, dsClient, muteStore)
+	bgCtx, cancelBg := context.WithCancel(context.Background())
+	scanner.Start(bgCtx)
 	chatHistoryStore := chathistory.New(config.ChatHistoryPath())
 	if err := chatHistoryStore.Err(); err != nil {
 		config.Logger.Warn("[chat_history] unavailable", "path", chatHistoryStore.Path(), "error", err)
@@ -69,7 +95,7 @@ func NewApp() (*App, error) {
 	embeddingsHandler := &embeddings.Handler{Store: store, Auth: resolver, DS: dsClient, ChatHistory: chatHistoryStore}
 	claudeHandler := &claude.Handler{Store: store, Auth: resolver, DS: dsClient, OpenAI: chatHandler, ChatHistory: chatHistoryStore}
 	geminiHandler := &gemini.Handler{Store: store, Auth: resolver, DS: dsClient, OpenAI: chatHandler, ChatHistory: chatHistoryStore}
-	adminHandler := &admin.Handler{Store: store, Pool: pool, DS: dsClient, OpenAI: chatHandler, ChatHistory: chatHistoryStore}
+	adminHandler := &admin.Handler{Store: store, Pool: pool, DS: dsClient, OpenAI: chatHandler, ChatHistory: chatHistoryStore, MuteStore: muteStore, Scanner: scanner}
 	ollamaHandler := &ollama.Handler{Store: store}
 	webuiHandler := webui.NewHandler()
 
@@ -127,7 +153,7 @@ func NewApp() (*App, error) {
 		http.NotFound(w, req)
 	})
 
-	return &App{Store: store, Pool: pool, Resolver: resolver, DS: dsClient, Router: r}, nil
+	return &App{Store: store, Pool: pool, Resolver: resolver, DS: dsClient, Router: r, MuteStore: muteStore, Scanner: scanner, cancelBackground: cancelBg}, nil
 }
 
 func timeout(d time.Duration) func(http.Handler) http.Handler {

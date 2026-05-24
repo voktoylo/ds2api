@@ -3,6 +3,8 @@ package accounts
 import (
 	"net/http"
 
+	"ds2api/internal/account/mutescan"
+	"ds2api/internal/account/mutestate"
 	"ds2api/internal/chathistory"
 	"ds2api/internal/config"
 	adminshared "ds2api/internal/httpapi/admin/shared"
@@ -14,6 +16,8 @@ type Handler struct {
 	DS          adminshared.DeepSeekCaller
 	OpenAI      adminshared.OpenAIChatCaller
 	ChatHistory *chathistory.Store
+	MuteStore   *mutestate.Store
+	Scanner     *mutescan.Scanner
 }
 
 var writeJSON = adminshared.WriteJSON

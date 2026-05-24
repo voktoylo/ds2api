@@ -3,6 +3,8 @@ package admin
 import (
 	"github.com/go-chi/chi/v5"
 
+	"ds2api/internal/account/mutescan"
+	"ds2api/internal/account/mutestate"
 	"ds2api/internal/chathistory"
 	adminaccounts "ds2api/internal/httpapi/admin/accounts"
 	adminauth "ds2api/internal/httpapi/admin/auth"
@@ -23,12 +25,14 @@ type Handler struct {
 	DS          adminshared.DeepSeekCaller
 	OpenAI      adminshared.OpenAIChatCaller
 	ChatHistory *chathistory.Store
+	MuteStore   *mutestate.Store
+	Scanner     *mutescan.Scanner
 }
 
 func RegisterRoutes(r chi.Router, h *Handler) {
 	deps := adminsharedDeps(h)
 	authHandler := &adminauth.Handler{Store: deps.Store, Pool: deps.Pool, DS: deps.DS, OpenAI: deps.OpenAI, ChatHistory: deps.ChatHistory}
-	accountsHandler := &adminaccounts.Handler{Store: deps.Store, Pool: deps.Pool, DS: deps.DS, OpenAI: deps.OpenAI, ChatHistory: deps.ChatHistory}
+	accountsHandler := &adminaccounts.Handler{Store: deps.Store, Pool: deps.Pool, DS: deps.DS, OpenAI: deps.OpenAI, ChatHistory: deps.ChatHistory, MuteStore: deps.MuteStore, Scanner: deps.Scanner}
 	configHandler := &adminconfig.Handler{Store: deps.Store, Pool: deps.Pool, DS: deps.DS, OpenAI: deps.OpenAI, ChatHistory: deps.ChatHistory}
 	settingsHandler := &adminsettings.Handler{Store: deps.Store, Pool: deps.Pool, DS: deps.DS, OpenAI: deps.OpenAI, ChatHistory: deps.ChatHistory}
 	proxiesHandler := &adminproxies.Handler{Store: deps.Store, Pool: deps.Pool, DS: deps.DS, OpenAI: deps.OpenAI, ChatHistory: deps.ChatHistory}
@@ -58,7 +62,7 @@ func adminsharedDeps(h *Handler) adminsharedDepsValue {
 	if h == nil {
 		return adminsharedDepsValue{}
 	}
-	return adminsharedDepsValue{Store: h.Store, Pool: h.Pool, DS: h.DS, OpenAI: h.OpenAI, ChatHistory: h.ChatHistory}
+	return adminsharedDepsValue{Store: h.Store, Pool: h.Pool, DS: h.DS, OpenAI: h.OpenAI, ChatHistory: h.ChatHistory, MuteStore: h.MuteStore, Scanner: h.Scanner}
 }
 
 type adminsharedDepsValue struct {
@@ -67,4 +71,6 @@ type adminsharedDepsValue struct {
 	DS          adminshared.DeepSeekCaller
 	OpenAI      adminshared.OpenAIChatCaller
 	ChatHistory *chathistory.Store
+	MuteStore   *mutestate.Store
+	Scanner     *mutescan.Scanner
 }
