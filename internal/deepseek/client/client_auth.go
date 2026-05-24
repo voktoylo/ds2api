@@ -73,6 +73,9 @@ func (c *Client) CreateSession(ctx context.Context, a *auth.RequestAuth, maxAtte
 			}
 		}
 		config.Logger.Warn("[create_session] failed", "status", status, "code", code, "biz_code", bizCode, "msg", msg, "biz_msg", bizMsg, "use_config_token", a.UseConfigToken, "account", a.AccountID)
+		if isMutedBizResponse(bizCode, msg, bizMsg) {
+			c.markAccountMuted(a.AccountID, failureMessage(msg, bizMsg, "user is muted (create_session)"))
+		}
 		if a.UseConfigToken {
 			if !refreshed && shouldAttemptRefresh(status, code, bizCode, msg, bizMsg) {
 				if c.Auth.RefreshToken(ctx, a) {

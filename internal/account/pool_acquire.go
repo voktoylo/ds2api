@@ -96,33 +96,16 @@ func (p *Pool) isMutedLocked(accountID string) bool {
 }
 
 // bumpQueueAfterAcquire moves the just-acquired account based on the active
-// strategy. Round-robin sends it to the back; sticky keeps it in place so
-// future calls keep selecting it until it becomes muted or saturated.
+// strategy. Round-robin sends it to the back for fairness. Sticky mode is a
+// no-op: queue order is preserved so the head account stays "primary" even
+// when concurrent requests temporarily overflow to later accounts. The head
+// only changes when the primary becomes muted, because acquireLocked then
+// naturally skips it via isMutedLocked.
 func (p *Pool) bumpQueueAfterAcquire(accountID string) {
 	if p.strategy == StrategySticky {
-		// Sticky: keep position so the same account is reused. But pull the
-		// chosen account to the head if it's not already, so once a request
-		// lands on a working account the pool keeps preferring it.
-		p.pullToFront(accountID)
 		return
 	}
 	p.bumpQueue(accountID)
-}
-
-// pullToFront moves accountID to position 0 of the queue. No-op when it is
-// already at the head or not present.
-func (p *Pool) pullToFront(accountID string) {
-	for i, id := range p.queue {
-		if id != accountID {
-			continue
-		}
-		if i == 0 {
-			return
-		}
-		p.queue = append(p.queue[:i], p.queue[i+1:]...)
-		p.queue = append([]string{accountID}, p.queue...)
-		return
-	}
 }
 
 func (p *Pool) bumpQueue(accountID string) {
