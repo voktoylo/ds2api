@@ -16,8 +16,9 @@ type Store struct {
 	path    string
 	fromEnv bool
 	keyMap  map[string]struct{} // O(1) API key lookup index
-	accMap  map[string]int      // O(1) account lookup: identifier -> slice index
-	accTest map[string]string   // runtime-only account test status cache
+	accMap   map[string]int    // O(1) account lookup: identifier -> slice index
+	accTest  map[string]string // runtime-only account test status cache
+	accError map[string]string // runtime-only account last-error message (only for failed tests)
 }
 
 func LoadStore() *Store {
@@ -173,6 +174,13 @@ func (s *Store) FindAccount(identifier string) (Account, bool) {
 }
 
 func (s *Store) UpdateAccountTestStatus(identifier, status string) error {
+	return s.UpdateAccountTestStatusWithError(identifier, status, "")
+}
+
+// UpdateAccountTestStatusWithError records the test status alongside an
+// optional human-readable failure reason. errMsg is only stored when status
+// is "failed"; any prior error is cleared on success.
+func (s *Store) UpdateAccountTestStatusWithError(identifier, status, errMsg string) error {
 	identifier = strings.TrimSpace(identifier)
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -181,6 +189,7 @@ func (s *Store) UpdateAccountTestStatus(identifier, status string) error {
 		return errors.New("account not found")
 	}
 	s.setAccountTestStatusLocked(s.cfg.Accounts[idx], status, identifier)
+	s.setAccountTestErrorLocked(s.cfg.Accounts[idx], status, errMsg, identifier)
 	return nil
 }
 
@@ -193,6 +202,19 @@ func (s *Store) AccountTestStatus(identifier string) (string, bool) {
 	defer s.mu.RUnlock()
 	status, ok := s.accTest[identifier]
 	return status, ok
+}
+
+// AccountTestError returns the last failure message recorded for an account,
+// or empty string if none. The bool indicates whether an entry exists.
+func (s *Store) AccountTestError(identifier string) (string, bool) {
+	identifier = strings.TrimSpace(identifier)
+	if identifier == "" {
+		return "", false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	msg, ok := s.accError[identifier]
+	return msg, ok
 }
 
 func (s *Store) UpdateAccountToken(identifier, token string) error {

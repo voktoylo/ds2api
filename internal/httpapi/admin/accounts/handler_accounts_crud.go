@@ -73,6 +73,7 @@ func (h *Handler) listAccounts(w http.ResponseWriter, r *http.Request) {
 	items := make([]map[string]any, 0, end-start)
 	for _, acc := range accounts[start:end] {
 		testStatus, _ := h.Store.AccountTestStatus(acc.Identifier())
+		lastError, _ := h.Store.AccountTestError(acc.Identifier())
 		token := strings.TrimSpace(acc.Token)
 		isMuted := false
 		muteUntil := ""
@@ -99,6 +100,7 @@ func (h *Handler) listAccounts(w http.ResponseWriter, r *http.Request) {
 			"has_token":       token != "",
 			"token_preview":   maskSecretPreview(token),
 			"test_status":     testStatus,
+			"last_error":      lastError,
 			"is_muted":        isMuted,
 			"mute_until":      muteUntil,
 			"mute_checked_at": muteCheckedAt,
@@ -116,7 +118,7 @@ func (h *Handler) listAccounts(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// accountStatusBucket: "active" | "muted" | "permban" | "error"
+// accountStatusBucket: "active" | "muted" | "permban" | "error" | "unrefreshed"
 func (h *Handler) accountStatusBucket(acc config.Account, now time.Time) string {
 	muted, until := h.mutedStateForAccount(acc, now)
 	if muted {
@@ -125,8 +127,12 @@ func (h *Handler) accountStatusBucket(acc config.Account, now time.Time) string 
 		}
 		return "muted"
 	}
-	if status, ok := h.Store.AccountTestStatus(acc.Identifier()); ok && status == "failed" {
+	status, ok := h.Store.AccountTestStatus(acc.Identifier())
+	if ok && status == "failed" {
 		return "error"
+	}
+	if !ok || strings.TrimSpace(status) == "" {
+		return "unrefreshed"
 	}
 	return "active"
 }
@@ -146,7 +152,7 @@ func (h *Handler) mutedStateForAccount(acc config.Account, now time.Time) (bool,
 }
 
 func (h *Handler) computeStatusCounts(accounts []config.Account) map[string]int {
-	counts := map[string]int{"all": len(accounts), "active": 0, "muted": 0, "permban": 0, "error": 0}
+	counts := map[string]int{"all": len(accounts), "active": 0, "muted": 0, "permban": 0, "error": 0, "unrefreshed": 0}
 	now := time.Now()
 	for _, acc := range accounts {
 		counts[h.accountStatusBucket(acc, now)]++

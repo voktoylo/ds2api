@@ -68,6 +68,8 @@ export default function AccountManagerContainer({ config, onRefresh, onMessage, 
         deleteAccount,
         testAccount,
         testAllAccounts,
+        testSelectedAccounts,
+        testingSelected,
         deleteAllSessions,
         updateAccountProxy,
         deleteBatch,
@@ -125,6 +127,12 @@ export default function AccountManagerContainer({ config, onRefresh, onMessage, 
         const ok = await deleteBatch(ids)
         if (ok) setSelectedIds(new Set())
     }, [selectedIds, deleteBatch, t])
+
+    const handleTestSelected = useCallback(async () => {
+        const ids = Array.from(selectedIds)
+        if (ids.length === 0) return
+        await testSelectedAccounts(ids)
+    }, [selectedIds, testSelectedAccounts])
 
     const handleRefreshMute = useCallback(() => {
         refreshMute()
@@ -217,6 +225,8 @@ export default function AccountManagerContainer({ config, onRefresh, onMessage, 
                 onSelectToggle={handleSelectToggle}
                 onSelectAll={handleSelectAll}
                 onBatchDelete={handleBatchDelete}
+                onTestSelected={handleTestSelected}
+                testingSelected={testingSelected}
                 statusFilter={statusFilter}
                 onStatusFilterChange={handleStatusFilterChange}
                 statusCounts={statusCounts}

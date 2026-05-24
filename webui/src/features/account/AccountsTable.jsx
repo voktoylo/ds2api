@@ -49,6 +49,8 @@ export default function AccountsTable({
     onSelectToggle,
     onSelectAll,
     onBatchDelete,
+    onTestSelected,
+    testingSelected = false,
     batchDeleting = false,
     refreshingMute = false,
     statusFilter = 'all',
@@ -104,6 +106,16 @@ export default function AccountsTable({
                         {(testingAll || refreshingMute) ? <span className="animate-spin mr-2">⟳</span> : <RefreshCw className="w-3 h-3 mr-2" />}
                         {testingAll ? t('accountManager.refreshingAll') : t('accountManager.refreshAll')}
                     </button>
+                    {onTestSelected && (
+                        <button
+                            onClick={onTestSelected}
+                            disabled={testingAll || testingSelected || totalSelected === 0}
+                            className="flex items-center px-3 py-2 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/80 transition-colors text-xs font-medium border border-border disabled:opacity-50"
+                        >
+                            {testingSelected ? <span className="animate-spin mr-2">⟳</span> : <RefreshCw className="w-3 h-3 mr-2" />}
+                            {testingSelected ? t('accountManager.refreshingSelected') : t('accountManager.refreshSelected')}
+                        </button>
+                    )}
                     <button
                         onClick={onShowAddAccount}
                         className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors font-medium text-sm shadow-sm"
@@ -119,6 +131,7 @@ export default function AccountsTable({
                     {[
                         { key: 'all', label: t('accountManager.statusTabAll') },
                         { key: 'active', label: t('accountManager.statusTabActive') },
+                        { key: 'unrefreshed', label: t('accountManager.statusTabUnrefreshed') },
                         { key: 'muted', label: t('accountManager.statusTabMuted') },
                         { key: 'permban', label: t('accountManager.statusTabPermban') },
                         { key: 'error', label: t('accountManager.statusTabError') },
@@ -248,7 +261,9 @@ export default function AccountsTable({
                                             : <ShieldCheck className="w-3 h-3" />}
                                     </div>
                                     <div className="min-w-0">
-                                        <div className="text-sm font-medium truncate">{acc.name || '-'}</div>
+                                        {acc.name && (
+                                            <div className="text-sm font-medium truncate">{acc.name}</div>
+                                        )}
                                         <div
                                             className="font-medium truncate flex items-center gap-1.5 cursor-pointer hover:text-primary transition-colors group"
                                             onClick={() => copyId(id)}
@@ -261,6 +276,11 @@ export default function AccountsTable({
                                         </div>
                                         {acc.remark && (
                                             <div className="text-xs text-muted-foreground truncate mt-0.5">{acc.remark}</div>
+                                        )}
+                                        {acc.test_status === 'failed' && acc.last_error && (
+                                            <div className="text-xs text-red-500 truncate mt-0.5" title={acc.last_error}>
+                                                {t('accountManager.lastErrorLabel')}: {acc.last_error}
+                                            </div>
                                         )}
                                         <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5 flex-wrap">
                                             <span>{acc.test_status === 'failed' ? t('accountManager.testStatusFailed') : isActive ? t('accountManager.sessionActive') : runtimeUnknown ? t('accountManager.runtimeStatusUnknown') : t('accountManager.reauthRequired')}</span>

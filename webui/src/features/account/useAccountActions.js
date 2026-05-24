@@ -13,6 +13,7 @@ export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, f
     const [loading, setLoading] = useState(false)
     const [testing, setTesting] = useState({})
     const [testingAll, setTestingAll] = useState(false)
+    const [testingSelected, setTestingSelected] = useState(false)
     const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0, results: [] })
     const [sessionCounts, setSessionCounts] = useState({})
     const [deletingSessions, setDeletingSessions] = useState({})
@@ -293,6 +294,40 @@ export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, f
         setTestingAll(false)
     }
 
+    const testSelectedAccounts = async (identifiers) => {
+        const ids = Array.isArray(identifiers)
+            ? identifiers.map(x => String(x || '').trim()).filter(Boolean)
+            : []
+        if (ids.length === 0) {
+            onMessage('error', t('accountManager.refreshSelectedNone'))
+            return
+        }
+        setTestingSelected(true)
+        setBatchProgress({ current: 0, total: ids.length, results: [] })
+        let successCount = 0
+        const results = []
+        for (let i = 0; i < ids.length; i++) {
+            const id = ids[i]
+            try {
+                const res = await apiFetch('/admin/accounts/test', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ identifier: id }),
+                })
+                const data = await res.json()
+                results.push({ id, success: data.success, message: data.message, time: data.response_time })
+                if (data.success) successCount++
+            } catch (e) {
+                results.push({ id, success: false, message: e.message })
+            }
+            setBatchProgress({ current: i + 1, total: ids.length, results: [...results] })
+        }
+        onMessage('success', t('accountManager.refreshSelectedCompleted', { success: successCount, total: ids.length }))
+        fetchAccounts()
+        onRefresh()
+        setTestingSelected(false)
+    }
+
     const deleteAllSessions = async (identifier) => {
         const accountID = String(identifier || '').trim()
         if (!accountID) {
@@ -474,6 +509,8 @@ export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, f
         deleteAccount,
         testAccount,
         testAllAccounts,
+        testSelectedAccounts,
+        testingSelected,
         deleteAllSessions,
         updateAccountProxy,
         deleteBatch,

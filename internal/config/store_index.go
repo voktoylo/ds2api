@@ -1,20 +1,29 @@
 package config
 
+import "strings"
+
 // rebuildIndexes must be called with the lock already held (or during init).
 func (s *Store) rebuildIndexes() {
 	prevStatus := s.accTest
+	prevError := s.accError
 	s.keyMap = make(map[string]struct{}, len(s.cfg.Keys))
 	for _, k := range s.cfg.Keys {
 		s.keyMap[k] = struct{}{}
 	}
 	s.accMap = make(map[string]int, len(s.cfg.Accounts))
 	s.accTest = make(map[string]string, len(s.cfg.Accounts))
+	s.accError = make(map[string]string, len(s.cfg.Accounts))
 	for i, acc := range s.cfg.Accounts {
 		id := acc.Identifier()
 		if id != "" {
 			s.accMap[id] = i
 			if status, ok := prevStatus[id]; ok {
 				s.setAccountTestStatusLocked(acc, status, "")
+				if status == "failed" {
+					if msg, ok := prevError[id]; ok && msg != "" {
+						s.setAccountTestErrorLocked(acc, status, msg, "")
+					}
+				}
 			}
 		}
 	}
@@ -51,5 +60,41 @@ func (s *Store) setAccountTestStatusLocked(acc Account, status, hintedIdentifier
 	}
 	if hintedIdentifier = lower(hintedIdentifier); hintedIdentifier != "" {
 		s.accTest[hintedIdentifier] = status
+	}
+}
+
+// setAccountTestErrorLocked records the last failure reason or clears it on
+// success. Stored under the same key variants as the test status so lookups
+// from any alias (email/mobile/identifier hint) return the same value.
+func (s *Store) setAccountTestErrorLocked(acc Account, status, msg, hintedIdentifier string) {
+	if s.accError == nil {
+		s.accError = map[string]string{}
+	}
+	status = lower(status)
+	keys := []string{}
+	if id := acc.Identifier(); id != "" {
+		keys = append(keys, id)
+	}
+	if email := acc.Email; email != "" {
+		keys = append(keys, email)
+	}
+	if mobile := CanonicalMobileKey(acc.Mobile); mobile != "" {
+		keys = append(keys, mobile)
+	}
+	if h := lower(hintedIdentifier); h != "" {
+		keys = append(keys, h)
+	}
+	if status == "failed" {
+		trimmed := strings.TrimSpace(msg)
+		if trimmed == "" {
+			return
+		}
+		for _, k := range keys {
+			s.accError[k] = trimmed
+		}
+		return
+	}
+	for _, k := range keys {
+		delete(s.accError, k)
 	}
 }
