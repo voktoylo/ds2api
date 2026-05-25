@@ -22,6 +22,7 @@ type DeepSeekCaller interface {
 	GetPow(ctx context.Context, a *auth.RequestAuth, maxAttempts int) (string, error)
 	UploadFile(ctx context.Context, a *auth.RequestAuth, req dsclient.UploadFileRequest, maxAttempts int) (*dsclient.UploadFileResult, error)
 	CallCompletion(ctx context.Context, a *auth.RequestAuth, payload map[string]any, powResp string, maxAttempts int) (*http.Response, error)
+	MarkAccountFailed(accountID, reason string)
 }
 
 type Options struct {
@@ -113,6 +114,7 @@ func ExecuteNonStreamStartedWithRetry(ctx context.Context, ds DeepSeekCaller, a 
 	for {
 		turn, outErr := collectAttempt(currentResp, stdReq, usagePrompt, opts)
 		if outErr != nil {
+			markFailingAccountIfBlocked(ds, a, outErr)
 			if canRetryOnAlternateAccount(ctx, a, outErr, opts.RetryEnabled, &accountSwitchAttempted) {
 				switched, switchErr := startStandardCompletionOnAlternateAccount(ctx, ds, a, stdReq, opts, maxAttempts)
 				if switchErr != nil {
@@ -153,6 +155,7 @@ func ExecuteNonStreamStartedWithRetry(ctx context.Context, ds DeepSeekCaller, a 
 			retryMax = shared.EmptyOutputRetryMaxAttempts()
 		}
 		if !opts.RetryEnabled || !assistantturn.ShouldRetryEmptyOutput(turn, attempts, retryMax) {
+			markFailingAccountIfBlocked(ds, a, turn.Error)
 			if canRetryOnAlternateAccount(ctx, a, turn.Error, opts.RetryEnabled, &accountSwitchAttempted) {
 				switched, switchErr := startStandardCompletionOnAlternateAccount(ctx, ds, a, stdReq, opts, maxAttempts)
 				if switchErr != nil {
@@ -192,7 +195,10 @@ func ExecuteNonStreamStartedWithRetry(ctx context.Context, ds DeepSeekCaller, a 
 }
 
 func canRetryOnAlternateAccount(ctx context.Context, a *auth.RequestAuth, outErr *assistantturn.OutputError, retryEnabled bool, attempted *bool) bool {
-	if outErr == nil || outErr.Status != http.StatusTooManyRequests {
+	if outErr == nil {
+		return false
+	}
+	if !isAccountSwitchSignal(outErr) {
 		return false
 	}
 	if !retryEnabled || attempted == nil || *attempted {
@@ -203,6 +209,42 @@ func canRetryOnAlternateAccount(ctx context.Context, a *auth.RequestAuth, outErr
 	}
 	*attempted = true
 	return a.SwitchAccount(ctx)
+}
+
+// isAccountSwitchSignal reports whether an OutputError indicates the current
+// account should be skipped and another tried. 429 covers DeepSeek's explicit
+// rate-limit response, 503 + upstream_unavailable covers DeepSeek's silent
+// block pattern where the upstream returns 200 with empty content (DS2API
+// translates that into "upstream_unavailable").
+func isAccountSwitchSignal(outErr *assistantturn.OutputError) bool {
+	if outErr == nil {
+		return false
+	}
+	if outErr.Status == http.StatusTooManyRequests {
+		return true
+	}
+	if outErr.Status == http.StatusServiceUnavailable && outErr.Code == "upstream_unavailable" {
+		return true
+	}
+	return false
+}
+
+// markFailingAccountIfBlocked persists a runtime-detected silent-block on the
+// account so the WebUI surfaces it in the "报错" tab. We intentionally do not
+// touch the mute store: a manual refresh that succeeds should be able to
+// move the account back to "正常" without waiting for a mute_until window.
+func markFailingAccountIfBlocked(ds DeepSeekCaller, a *auth.RequestAuth, outErr *assistantturn.OutputError) {
+	if ds == nil || a == nil || !a.UseConfigToken || a.AccountID == "" || outErr == nil {
+		return
+	}
+	if outErr.Status != http.StatusServiceUnavailable || outErr.Code != "upstream_unavailable" {
+		return
+	}
+	reason := strings.TrimSpace(outErr.Message)
+	if reason == "" {
+		reason = "upstream_unavailable"
+	}
+	ds.MarkAccountFailed(a.AccountID, reason)
 }
 
 func startStandardCompletionOnAlternateAccount(ctx context.Context, ds DeepSeekCaller, a *auth.RequestAuth, stdReq promptcompat.StandardRequest, opts Options, maxAttempts int) (StartResult, *assistantturn.OutputError) {

@@ -74,6 +74,8 @@ func (m *inlineUploadDSStub) DeleteAllSessionsForToken(_ context.Context, _ stri
 	return nil
 }
 
+func (m *inlineUploadDSStub) MarkAccountFailed(string, string) {}
+
 func TestPreprocessInlineFileInputsReplacesDataURLAndCollectsRefFileIDs(t *testing.T) {
 	ds := &inlineUploadDSStub{}
 	h := &openAITestSurface{DS: ds}

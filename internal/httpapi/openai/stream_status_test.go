@@ -66,6 +66,8 @@ func (m streamStatusDSStub) DeleteAllSessionsForToken(_ context.Context, _ strin
 	return nil
 }
 
+func (m streamStatusDSStub) MarkAccountFailed(string, string) {}
+
 type streamStatusDSSeqStub struct {
 	resps    []*http.Response
 	payloads []map[string]any
@@ -103,6 +105,8 @@ func (m *streamStatusDSSeqStub) DeleteSessionForToken(_ context.Context, _ strin
 func (m *streamStatusDSSeqStub) DeleteAllSessionsForToken(_ context.Context, _ string) error {
 	return nil
 }
+
+func (m *streamStatusDSSeqStub) MarkAccountFailed(string, string) {}
 
 func makeOpenAISSEHTTPResponse(lines ...string) *http.Response {
 	body := strings.Join(lines, "\n")

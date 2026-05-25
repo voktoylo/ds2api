@@ -85,6 +85,20 @@ func isMutedBizResponse(bizCode int, msg, bizMsg string) bool {
 	return strings.Contains(hay, "user is muted") || strings.Contains(hay, "account is muted")
 }
 
+// MarkAccountFailed records a runtime-detected failure (e.g. silent-block
+// upstream_unavailable) by flipping the account's test_status to "failed"
+// with the supplied reason. This surfaces the account in the WebUI "报错"
+// tab so the operator can manually re-test. We deliberately do NOT add the
+// account to the mute store: muting would skip the account in future
+// requests for hours, whereas a silent-block may clear on its own and the
+// next manual refresh should be allowed to move it back to "正常".
+func (c *Client) MarkAccountFailed(accountID, reason string) {
+	if c == nil || c.Store == nil || strings.TrimSpace(accountID) == "" {
+		return
+	}
+	_ = c.Store.UpdateAccountTestStatusWithError(accountID, "failed", strings.TrimSpace(reason))
+}
+
 // PreloadPow 保留兼容接口，纯 Go 实现无需预加载。
 func (c *Client) PreloadPow(_ context.Context) error {
 	return nil

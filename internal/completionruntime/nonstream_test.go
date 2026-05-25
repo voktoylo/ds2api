@@ -59,6 +59,8 @@ func (f *fakeDeepSeekCaller) CallCompletion(_ context.Context, a *auth.RequestAu
 	return resp, nil
 }
 
+func (f *fakeDeepSeekCaller) MarkAccountFailed(_, _ string) {}
+
 func TestExecuteNonStreamWithRetryBuildsCanonicalTurn(t *testing.T) {
 	ds := &fakeDeepSeekCaller{responses: []*http.Response{sseHTTPResponse(
 		http.StatusOK,

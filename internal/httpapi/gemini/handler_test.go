@@ -83,6 +83,9 @@ func (m *testGeminiDS) CallCompletion(_ context.Context, _ *auth.RequestAuth, pa
 	return m.resp, nil
 }
 
+//nolint:unused // reserved test double for native Gemini DS-call path coverage.
+func (m *testGeminiDS) MarkAccountFailed(string, string) {}
+
 type geminiOpenAIErrorStub struct {
 	status  int
 	body    string

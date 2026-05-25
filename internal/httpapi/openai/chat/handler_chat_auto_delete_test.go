@@ -46,6 +46,8 @@ func (m *autoDeleteModeDSStub) DeleteAllSessionsForToken(_ context.Context, _ st
 	return nil
 }
 
+func (m *autoDeleteModeDSStub) MarkAccountFailed(string, string) {}
+
 func (m *autoDeleteModeDSStub) DeleteSessionForTokenCtx(ctx context.Context, _ string, sessionID string) (*dsclient.DeleteSessionResult, error) {
 	m.singleCalls++
 	m.lastSessionID = sessionID

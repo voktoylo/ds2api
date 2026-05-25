@@ -111,6 +111,8 @@ func (m streamStatusDSStub) DeleteAllSessionsForToken(_ context.Context, _ strin
 	return nil
 }
 
+func (m streamStatusDSStub) MarkAccountFailed(string, string) {}
+
 func makeOpenAISSEHTTPResponse(lines ...string) *http.Response {
 	body := strings.Join(lines, "\n")
 	if !strings.HasSuffix(body, "\n") {
@@ -180,6 +182,8 @@ func (m *inlineUploadDSStub) DeleteSessionForToken(_ context.Context, _ string, 
 func (m *inlineUploadDSStub) DeleteAllSessionsForToken(_ context.Context, _ string) error {
 	return nil
 }
+
+func (m *inlineUploadDSStub) MarkAccountFailed(string, string) {}
 
 func historySplitTestMessages() []any {
 	toolCalls := []any{

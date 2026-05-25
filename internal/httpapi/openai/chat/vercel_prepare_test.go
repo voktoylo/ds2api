@@ -254,6 +254,8 @@ func (m *vercelReleaseAutoDeleteDSStub) DeleteAllSessionsForToken(_ context.Cont
 	return nil
 }
 
+func (m *vercelReleaseAutoDeleteDSStub) MarkAccountFailed(string, string) {}
+
 type vercelReleaseAuthStub struct {
 	events *[]string
 }

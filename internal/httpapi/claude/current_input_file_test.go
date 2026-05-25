@@ -109,6 +109,8 @@ func (d *claudeCurrentInputDS) CallCompletion(_ context.Context, _ *auth.Request
 	}, nil
 }
 
+func (d *claudeCurrentInputDS) MarkAccountFailed(string, string) {}
+
 func TestClaudeDirectAppliesCurrentInputFile(t *testing.T) {
 	ds := &claudeCurrentInputDS{}
 	historyStore := chathistory.New(filepath.Join(t.TempDir(), "history.json"))
