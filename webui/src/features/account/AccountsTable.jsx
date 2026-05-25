@@ -73,6 +73,19 @@ export default function AccountsTable({
     const someOnPageSelected = selectedOnPageCount > 0 && !allOnPageSelected
     const totalSelected = selectedSet.size
 
+    const refreshAllLabelKey = {
+        all: 'accountManager.refreshAll',
+        active: 'accountManager.refreshAllActive',
+        unrefreshed: 'accountManager.refreshAllUnrefreshed',
+        muted: 'accountManager.refreshAllMuted',
+        permban: 'accountManager.refreshAllPermban',
+        error: 'accountManager.refreshAllError',
+    }[statusFilter] || 'accountManager.refreshAll'
+    const refreshAllCountForFilter =
+        statusFilter && statusFilter !== 'all' && statusCounts && typeof statusCounts[statusFilter] === 'number'
+            ? statusCounts[statusFilter]
+            : totalAccounts
+
     return (
         <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm">
             <div className="p-6 border-b border-border flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -100,11 +113,11 @@ export default function AccountsTable({
                     )}
                     <button
                         onClick={onTestAll}
-                        disabled={testingAll || totalAccounts === 0}
+                        disabled={testingAll || refreshAllCountForFilter === 0}
                         className="flex items-center px-3 py-2 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/80 transition-colors text-xs font-medium border border-border disabled:opacity-50"
                     >
                         {(testingAll || refreshingMute) ? <span className="animate-spin mr-2">⟳</span> : <RefreshCw className="w-3 h-3 mr-2" />}
-                        {testingAll ? t('accountManager.refreshingAll') : t('accountManager.refreshAll')}
+                        {testingAll ? t('accountManager.refreshingAll') : `${t(refreshAllLabelKey)} (${refreshAllCountForFilter})`}
                     </button>
                     {onTestSelected && (
                         <button

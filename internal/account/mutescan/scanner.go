@@ -111,6 +111,44 @@ func (s *Scanner) RefreshNow(ctx context.Context) (Summary, error) {
 	return s.runOnce(ctx), nil
 }
 
+// RefreshAccount scans a single account by identifier and writes the result
+// into mutestate.Store. Useful when the operator manually re-tests one row
+// in the WebUI and we want the mute status to reflect reality immediately
+// without sweeping the entire pool.
+func (s *Scanner) RefreshAccount(ctx context.Context, identifier string) error {
+	if s == nil || s.muteStore == nil || s.client == nil || s.store == nil {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	acc, ok := s.store.FindAccount(identifier)
+	if !ok {
+		return nil
+	}
+	id := acc.Identifier()
+	if id == "" {
+		return nil
+	}
+	result, err := s.client.FetchUsersCurrentForAccount(ctx, acc)
+	status := mutestate.Status{CheckedAt: time.Now()}
+	if err != nil {
+		status.LastError = err.Error()
+		if prev, ok := s.muteStore.Get(id); ok {
+			status.IsMuted = prev.IsMuted
+			status.MuteUntil = prev.MuteUntil
+		}
+		s.muteStore.Set(id, status)
+		return err
+	}
+	if result != nil {
+		status.IsMuted = result.IsMuted
+		status.MuteUntil = result.MuteUntil
+	}
+	s.muteStore.Set(id, status)
+	return nil
+}
+
 func (s *Scanner) run(ctx context.Context, done chan struct{}) {
 	defer close(done)
 	// Kick off an immediate sweep so the store has data before the first

@@ -118,6 +118,15 @@ func (h *Handler) testAccount(ctx context.Context, acc config.Account, model, me
 			errMsg, _ = result["message"].(string)
 		}
 		_ = h.Store.UpdateAccountTestStatusWithError(identifier, status, errMsg)
+		// Single-account mute refresh: piggyback on the test so the WebUI row
+		// reflects current mute_until without forcing the operator to also
+		// click "刷新禁言". A failure here is non-fatal — the periodic sweep
+		// will eventually re-check anyway.
+		if h.Scanner != nil && identifier != "" {
+			if scanErr := h.Scanner.RefreshAccount(ctx, identifier); scanErr != nil {
+				config.Logger.Debug("[test_account] mute refresh failed", "account", identifier, "error", scanErr)
+			}
+		}
 	}()
 	token, err := h.DS.Login(ctx, acc)
 	if err != nil {

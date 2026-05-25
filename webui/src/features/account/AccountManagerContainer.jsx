@@ -134,6 +134,10 @@ export default function AccountManagerContainer({ config, onRefresh, onMessage, 
         await testSelectedAccounts(ids)
     }, [selectedIds, testSelectedAccounts])
 
+    const handleTestAll = useCallback(() => {
+        return testAllAccounts({ statusFilter })
+    }, [testAllAccounts, statusFilter])
+
     const handleRefreshMute = useCallback(() => {
         refreshMute()
     }, [refreshMute])
@@ -208,7 +212,7 @@ export default function AccountManagerContainer({ config, onRefresh, onMessage, 
                 totalPages={totalPages}
                 resolveAccountIdentifier={resolveAccountIdentifier}
                 proxies={config?.proxies || []}
-                onTestAll={testAllAccounts}
+                onTestAll={handleTestAll}
                 onShowAddAccount={openAddAccount}
                 onEditAccount={openEditAccount}
                 onTestAccount={testAccount}

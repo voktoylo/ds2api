@@ -243,26 +243,41 @@ export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, f
         }
     }
 
-    const testAllAccounts = async () => {
+    const testAllAccounts = async (opts = {}) => {
+        const statusFilter = String(opts.statusFilter || 'all').trim() || 'all'
         if (!confirm(t('accountManager.testAllConfirm'))) return
-        const allAccounts = config.accounts || []
-        if (allAccounts.length === 0) return
+
+        // Fetch the full list under the active status filter so 刷新全部 in a
+        // sub-tab only touches accounts belonging to that bucket. We use a
+        // very large page_size to grab them all in one shot — the backend
+        // already filters by status_bucket via ?status=.
+        let targetIDs = []
+        try {
+            const params = new URLSearchParams({ page: '1', page_size: '99999' })
+            if (statusFilter && statusFilter !== 'all') params.set('status', statusFilter)
+            const listRes = await apiFetch(`/admin/accounts?${params.toString()}`)
+            if (listRes.ok) {
+                const listData = await listRes.json()
+                targetIDs = (listData?.items || []).map(it => String(it.identifier || '').trim()).filter(Boolean)
+            }
+        } catch (_e) {
+            // Fall back to local cache so the operator can still trigger a
+            // refresh if the listing endpoint hiccups.
+        }
+        if (targetIDs.length === 0) {
+            const localAccounts = config.accounts || []
+            targetIDs = localAccounts.map(acc => resolveAccountIdentifier(acc)).filter(Boolean)
+        }
+        if (targetIDs.length === 0) return
 
         setTestingAll(true)
-        setBatchProgress({ current: 0, total: allAccounts.length, results: [] })
+        setBatchProgress({ current: 0, total: targetIDs.length, results: [] })
 
         let successCount = 0
         const results = []
 
-        for (let i = 0; i < allAccounts.length; i++) {
-            const acc = allAccounts[i]
-            const id = resolveAccountIdentifier(acc)
-            if (!id) {
-                results.push({ id: '-', success: false, message: t('accountManager.invalidIdentifier') })
-                setBatchProgress({ current: i + 1, total: allAccounts.length, results: [...results] })
-                continue
-            }
-
+        for (let i = 0; i < targetIDs.length; i++) {
+            const id = targetIDs[i]
             try {
                 const res = await apiFetch('/admin/accounts/test', {
                     method: 'POST',
@@ -276,19 +291,12 @@ export function useAccountActions({ apiFetch, t, onMessage, onRefresh, config, f
                 results.push({ id, success: false, message: e.message })
             }
 
-            setBatchProgress({ current: i + 1, total: allAccounts.length, results: [...results] })
+            setBatchProgress({ current: i + 1, total: targetIDs.length, results: [...results] })
         }
 
-        const muteResult = await refreshMute({ silent: true })
-        if (muteResult.ok) {
-            onMessage('success', t('accountManager.refreshAllCompleted', {
-                success: successCount,
-                total: allAccounts.length,
-                muted: muteResult.muted,
-            }))
-        } else {
-            onMessage('success', t('accountManager.testAllCompleted', { success: successCount, total: allAccounts.length }))
-        }
+        // testAccount already piggybacks a per-account mute refresh, so we no
+        // longer need a separate /admin/accounts/refresh-mute sweep here.
+        onMessage('success', t('accountManager.testAllCompleted', { success: successCount, total: targetIDs.length }))
         fetchAccounts()
         onRefresh()
         setTestingAll(false)
