@@ -224,10 +224,17 @@ export default function AccountsTable({
                         const isActive = acc.test_status === 'ok' || acc.has_token
                         const isSelected = id && selectedSet.has(id)
                         const isMuted = Boolean(acc.is_muted)
+                        const isPermban = acc.status_bucket === 'permban'
                         const muteUntilStr = formatMuteTime(acc.mute_until)
                         const muteCheckedStr = formatMuteTime(acc.mute_checked_at)
+                        const permbanReason = (acc.last_error || acc.mute_last_error || '').trim()
+                        const permbanBadgeText = permbanReason
+                            ? t('accountManager.muteStatusPermbanWithReason', { reason: permbanReason })
+                            : t('accountManager.muteStatusPermban')
                         let muteTooltip
-                        if (isMuted) {
+                        if (isPermban) {
+                            muteTooltip = permbanBadgeText
+                        } else if (isMuted) {
                             muteTooltip = muteUntilStr
                                 ? t('accountManager.muteStatusMuted', { time: muteUntilStr })
                                 : t('accountManager.muteStatusMutedUnknown')
@@ -297,7 +304,14 @@ export default function AccountsTable({
                                         )}
                                         <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5 flex-wrap">
                                             <span>{acc.test_status === 'failed' ? t('accountManager.testStatusFailed') : isActive ? t('accountManager.sessionActive') : runtimeUnknown ? t('accountManager.runtimeStatusUnknown') : t('accountManager.reauthRequired')}</span>
-                                            {isMuted && (
+                                            {isPermban ? (
+                                                <span
+                                                    className="font-mono bg-red-600/20 text-red-600 px-1.5 py-0.5 rounded text-[10px]"
+                                                    title={permbanBadgeText}
+                                                >
+                                                    {permbanBadgeText}
+                                                </span>
+                                            ) : isMuted && (
                                                 <span className="font-mono bg-red-500/10 text-red-500 px-1.5 py-0.5 rounded text-[10px]">
                                                     {muteUntilStr
                                                         ? t('accountManager.muteStatusMuted', { time: muteUntilStr })

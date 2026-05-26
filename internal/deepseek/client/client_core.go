@@ -74,6 +74,25 @@ func (c *Client) markAccountMuted(accountID, reason string) {
 	})
 }
 
+// markAccountPermbanned is called when DeepSeek explicitly rejects login with
+// USER_IS_BANNED — the account is dead at the upstream side, not just muted.
+// We set MuteUntil far in the future (10y) so accountStatusBucket buckets it
+// as "permban" and pool.Acquire skips it permanently. A future manual refresh
+// that succeeds (login returns ok, /users/current reports IsMuted=false) will
+// overwrite this entry and naturally restore the account.
+func (c *Client) markAccountPermbanned(accountID, reason string) {
+	if c == nil || c.muteStore == nil || strings.TrimSpace(accountID) == "" {
+		return
+	}
+	now := time.Now()
+	c.muteStore.Set(accountID, mutestate.Status{
+		IsMuted:   true,
+		MuteUntil: now.Add(10 * 365 * 24 * time.Hour),
+		CheckedAt: now,
+		LastError: reason,
+	})
+}
+
 // isMutedBizResponse classifies a DeepSeek response as "this account is
 // muted" using both biz_code (14) and biz_msg/msg text fallbacks so we still
 // catch the signal if DeepSeek renumbers later.

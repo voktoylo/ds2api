@@ -180,6 +180,8 @@
         "muteStatusActive": "Active",
         "muteStatusMuted": "Unmute at {time}",
         "muteStatusMutedUnknown": "Unmute time unknown",
+        "muteStatusPermban": "Permban",
+        "muteStatusPermbanWithReason": "Permban · {reason}",
         "muteLastChecked": "Last checked {time}",
         "deleteSelected": "Delete Selected ({count})",
         "refreshMute": "Refresh Mute Status",

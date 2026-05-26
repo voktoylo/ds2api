@@ -78,6 +78,7 @@ func (h *Handler) listAccounts(w http.ResponseWriter, r *http.Request) {
 		isMuted := false
 		muteUntil := ""
 		muteCheckedAt := ""
+		muteLastError := ""
 		if h.MuteStore != nil {
 			if status, ok := h.MuteStore.Get(acc.Identifier()); ok {
 				isMuted = status.IsMuted
@@ -87,6 +88,7 @@ func (h *Handler) listAccounts(w http.ResponseWriter, r *http.Request) {
 				if !status.CheckedAt.IsZero() {
 					muteCheckedAt = status.CheckedAt.UTC().Format(time.RFC3339)
 				}
+				muteLastError = strings.TrimSpace(status.LastError)
 			}
 		}
 		items = append(items, map[string]any{
@@ -104,6 +106,7 @@ func (h *Handler) listAccounts(w http.ResponseWriter, r *http.Request) {
 			"is_muted":        isMuted,
 			"mute_until":      muteUntil,
 			"mute_checked_at": muteCheckedAt,
+			"mute_last_error": muteLastError,
 			"status_bucket":   h.accountStatusBucket(acc, now),
 		})
 	}

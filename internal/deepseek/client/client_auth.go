@@ -35,10 +35,18 @@ func (c *Client) Login(ctx context.Context, acc config.Account) (string, error) 
 	}
 	code := intFrom(resp["code"])
 	if code != 0 {
+		msg, _ := resp["msg"].(string)
+		if isPermbanLoginResponse(code, msg) {
+			c.markAccountPermbanned(acc.Identifier(), strings.TrimSpace(msg))
+		}
 		return "", fmt.Errorf("login failed: %v", resp["msg"])
 	}
 	data, _ := resp["data"].(map[string]any)
 	if intFrom(data["biz_code"]) != 0 {
+		bizMsg, _ := data["biz_msg"].(string)
+		if isPermbanLoginResponse(intFrom(data["biz_code"]), bizMsg) {
+			c.markAccountPermbanned(acc.Identifier(), strings.TrimSpace(bizMsg))
+		}
 		return "", fmt.Errorf("login failed: %v", data["biz_msg"])
 	}
 	bizData, _ := data["biz_data"].(map[string]any)
@@ -272,6 +280,21 @@ func extractResponseStatus(resp map[string]any) (code int, bizCode int, msg stri
 		}
 	}
 	return code, bizCode, msg, bizMsg
+}
+
+// isPermbanLoginResponse reports whether a DeepSeek /users/login response
+// indicates a hard account-level ban (not a temporary mute). Triggered by
+// the literal "USER_IS_BANNED" / "ACCOUNT_BANNED" / "PERMBAN" tokens in
+// either msg or biz_msg so we still catch the signal across rename.
+func isPermbanLoginResponse(_ int, msg string) bool {
+	hay := strings.ToUpper(strings.TrimSpace(msg))
+	if hay == "" {
+		return false
+	}
+	return strings.Contains(hay, "USER_IS_BANNED") ||
+		strings.Contains(hay, "ACCOUNT_BANNED") ||
+		strings.Contains(hay, "ACCOUNT_DISABLED") ||
+		strings.Contains(hay, "PERMBAN")
 }
 
 func normalizeMobileForLogin(raw string) (mobile string, areaCode any) {

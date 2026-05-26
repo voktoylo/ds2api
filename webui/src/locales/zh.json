@@ -180,6 +180,8 @@
         "muteStatusActive": "状态正常",
         "muteStatusMuted": "解封 {time}",
         "muteStatusMutedUnknown": "解封时间未知",
+        "muteStatusPermban": "永封",
+        "muteStatusPermbanWithReason": "永封 · {reason}",
         "muteLastChecked": "上次检查 {time}",
         "deleteSelected": "删除选中 ({count})",
         "refreshMute": "刷新禁言状态",
