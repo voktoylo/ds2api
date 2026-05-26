@@ -11,6 +11,9 @@ func (p *Pool) canQueueLocked(target string, exclude map[string]bool) bool {
 		if p.isMutedLocked(target) {
 			return false
 		}
+		if p.isFailedLocked(target) {
+			return false
+		}
 	} else if !p.hasUnmutedCandidateLocked(exclude) {
 		return false
 	}
@@ -26,6 +29,9 @@ func (p *Pool) hasUnmutedCandidateLocked(exclude map[string]bool) bool {
 			continue
 		}
 		if p.isMutedLocked(id) {
+			continue
+		}
+		if p.isFailedLocked(id) {
 			continue
 		}
 		if _, ok := p.store.FindAccount(id); !ok {

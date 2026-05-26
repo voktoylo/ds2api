@@ -54,6 +54,9 @@ func (p *Pool) acquireLocked(target string, exclude map[string]bool) (config.Acc
 		if p.isMutedLocked(target) {
 			return config.Account{}, false
 		}
+		if p.isFailedLocked(target) {
+			return config.Account{}, false
+		}
 		acc, ok := p.store.FindAccount(target)
 		if !ok {
 			return config.Account{}, false
@@ -75,6 +78,9 @@ func (p *Pool) tryAcquire(exclude map[string]bool) (config.Account, bool) {
 		if p.isMutedLocked(id) {
 			continue
 		}
+		if p.isFailedLocked(id) {
+			continue
+		}
 		acc, ok := p.store.FindAccount(id)
 		if !ok {
 			continue
@@ -93,6 +99,19 @@ func (p *Pool) isMutedLocked(accountID string) bool {
 		return false
 	}
 	return p.muteStore.IsActiveMuted(accountID)
+}
+
+// isFailedLocked reports whether the account's most recent test status is
+// "failed" — set by markFailingAccountIfBlocked when DeepSeek silent-blocks
+// with 503/upstream_unavailable. Treated as un-acquirable so the same dead
+// account is not chosen again on subsequent requests until a manual refresh
+// (per-row test or 刷新) flips it back to "ok". The caller must hold p.mu.
+func (p *Pool) isFailedLocked(accountID string) bool {
+	if p.store == nil {
+		return false
+	}
+	status, _ := p.store.AccountTestStatus(accountID)
+	return status == "failed"
 }
 
 // bumpQueueAfterAcquire moves the just-acquired account based on the active
